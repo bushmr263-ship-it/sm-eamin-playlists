@@ -16,5 +16,11 @@
     "url": "https://raw.githubusercontent.com/television-app/television-data/main/playlist.json",
     "encrypted": true,
     "auto_group": true
+  },
+  {
+    "name": "Events FLV",
+    "slug": "events",
+    "url": "https://raw.githubusercontent.com/sarsx3/aladin450/refs/heads/main/events.json",
+    "flv_only": true
   }
 ]
