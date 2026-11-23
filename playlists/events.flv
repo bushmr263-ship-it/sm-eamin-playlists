@@ -1,0 +1,8 @@
+#EXTM3U
+#PLAYLIST:Events FLV
+#EXTINF:-1 tvg-name="Channel 4",Channel 4
+https://live200.kravonstreamdelivery.com/live/channel23.flv
+#EXTINF:-1 tvg-name="Channel 7",Channel 7
+https://live200.kravonstreamdelivery.com/live/channel19.flv
+#EXTINF:-1 tvg-name="Channel 8",Channel 8
+https://live200.kravonstreamdelivery.com/live/channel1.flv
