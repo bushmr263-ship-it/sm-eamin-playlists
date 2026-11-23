@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-sources.json এ থাকা প্রতিটি JSON লিংক থেকে আলাদা আলাদা .m3u প্লেলিস্ট বানায়।
+sources.json এ থাকা প্রতিটি JSON লিংক থেকে আলাদা আলাদা প্লেলিস্ট বানায়।
 শুধু Python-এর বিল্ট-ইন লাইব্রেরি ব্যবহার করা হয়েছে, তাই কিছু install করতে হয় না।
 
 বিশেষ ক্ষমতা:
-  * ভাঙা JSON (যেমন  "id": ,  বা শেষে বাড়তি কমা) নিজে ঠিক করে পড়ে
-  * ক্যাটেগরির ভেতরে ক্যাটেগরি (nested) থাকলেও সব চ্যানেল তোলে
-  * 𝗜𝘀𝗹𝗮𝗺𝗶𝗰 এর মতো বিশেষ ফন্টের অক্ষর সাধারণ অক্ষরে বদলায়
-  * ক্যাটেগরি না থাকলে নাম দেখে নিজে গ্রুপ ঠিক করে (auto_group)
-  * referer / user_agent থাকলে প্লেলিস্টে যোগ করে
-  * "encrypted": true হলে Television-style AES-CBC ডিক্রিপ্ট করে (pycryptodome)
-  * GitHub Gist লিংক হলে CDN ক্যাশ এড়িয়ে সরাসরি Gist API থেকে সবসময় সর্বশেষ কনটেন্ট আনে
-  * "type": "smiptv" হলে SM IPTV 3-step API flow হ্যান্ডেল করে
+- ভাঙা JSON (যেমন  "id": ,  বা শেষে বাড়তি কমা) নিজে ঠিক করে পড়ে
+- ক্যাটেগরির ভেতরে ক্যাটেগরি (nested) থাকলেও সব চ্যানেল তোলে
+- 𝗜𝘀𝗹𝗮𝗺𝗶𝗰 এর মতো বিশেষ ফন্টের অক্ষর সাধারণ অক্ষরে বদলায়
+- ক্যাটেগরি না থাকলে নাম দেখে নিজে গ্রুপ ঠিক করে (auto_group)
+- referer / user_agent থাকলে প্লেলিস্টে যোগ করে
+- "encrypted": true হলে Television-style AES-CBC ডিক্রিপ্ট করে (pycryptodome)
+- GitHub Gist লিংক হলে CDN ক্যাশ এড়িয়ে সরাসরি Gist API থেকে সবসময় সর্বশেষ কনটেন্ট আনে
+- "type": "smiptv" হলে SM IPTV 3-step API flow হ্যান্ডেল করে
     (GET exp/ → POST token → GET channels with Bearer token)
     এবং DRM (Widevine/ClearKey) kid+key সহ KODIPROP লেখে
+- "flv_only": true হলে শুধু .flv লিংক নেয় এবং ডিফল্টভাবে .flv এক্সটেনশনে সেভ করে
 """
 import base64
 import hashlib
@@ -64,6 +65,20 @@ DEFAULT_GROUP_RULES = {
 
 def log(msg):
     print(msg, flush=True)
+
+
+def is_flv_url(url: str) -> bool:
+    clean_url = re.sub(r"\s+", "", str(url or "")).split("|")[0].split("?")[0].split("#")[0].lower()
+    return clean_url.endswith(".flv")
+
+
+def resolve_output_file(src: dict) -> Path:
+    slug = src["slug"]
+    flv_only = bool(src.get("flv_only"))
+    ext = str(src.get("output_ext") or ("flv" if flv_only else "m3u")).lstrip(".").lower()
+    if not ext:
+        ext = "flv" if flv_only else "m3u"
+    return OUT_DIR / f"{slug}.{ext}"
 
 
 # ---------------------------------------------------------------- AES ডিক্রিপ্ট (Television-style)
@@ -204,21 +219,10 @@ def fetch_json_api(url, method="GET", headers=None, timeout=30):
 # SM IPTV — বিশেষ 3-step API flow
 # ================================================================
 def process_smiptv(src):
-    """
-    SM IPTV এর ৩ ধাপের API flow:
-      1) GET {config_url}  →  { "url": "https://worker-url/" }
-      2) POST {worker}/token  →  { "token": "..." }
-      3) GET  {worker}/channels  (Authorization: Bearer <token>)
-         →  { "categories": [ { "name": "...", "channels": [...] } ] }
-
-    প্রতিটি চ্যানেলে থাকতে পারে:
-      stream_url, logo, referer, user_agent, origin, cookie, kid, key
-    DRM চ্যানেলে kid+key থাকলে KODIPROP:clearkey লেখা হয়।
-    """
     name       = src["name"]
-    slug       = src["slug"]
     config_url = src["config_url"]
-    out_file   = OUT_DIR / f"{slug}.m3u"
+    flv_only   = bool(src.get("flv_only"))
+    out_file   = resolve_output_file(src)
     log(f"▶ {name} (SM IPTV) -> {out_file.name}")
 
     # Step 1 — Worker URL
@@ -268,6 +272,8 @@ def process_smiptv(src):
             ch_name    = clean(ch.get("name") or "Unknown")
             if not stream_url or not is_http(stream_url):
                 continue
+            if flv_only and not is_flv_url(stream_url):
+                continue
             key_pair = (ch_name.lower(), stream_url)
             if key_pair in seen:
                 continue
@@ -282,7 +288,6 @@ def process_smiptv(src):
             kid    = ch.get("kid") or ""
             ck_key = ch.get("key") or ""
 
-            # #EXTINF
             attrs = []
             if ch_id and not str(ch_id).isdigit():
                 attrs.append(f'tvg-id="{clean(str(ch_id))}"')
@@ -293,7 +298,6 @@ def process_smiptv(src):
 
             lines.append(f'#EXTINF:-1 {" ".join(attrs)},{ch_name}')
 
-            # HTTP headers (VLC/Kodi style)
             if ua:
                 lines.append(f"#EXTVLCOPT:http-user-agent={ua}")
             if ref:
@@ -303,7 +307,6 @@ def process_smiptv(src):
             if cookie:
                 lines.append(f"#EXTVLCOPT:http-cookie={cookie}")
 
-            # DRM ClearKey
             if kid and ck_key:
                 lines.append("#KODIPROP:inputstream.adaptive.license_type=clearkey")
                 lines.append(f"#KODIPROP:inputstream.adaptive.license_key={kid}:{ck_key}")
@@ -328,12 +331,6 @@ def process_smiptv(src):
 
 # ---------------------------------------------------------------- ভাঙা JSON মেরামত
 def repair_json(text):
-    """
-    স্ট্রিংয়ের বাইরে থাকা সাধারণ ভুল ঠিক করে:
-      "id": ,        ->  "id": null,      (মান নেই)
-      [1, 2, ]       ->  [1, 2]           (শেষে বাড়তি কমা)
-      a,, b          ->  a, b             (দুইটা কমা)
-    """
     out, in_str, esc, n, i = [], False, False, len(text), 0
     while i < n:
         c = text[i]
@@ -356,7 +353,7 @@ def repair_json(text):
                 j += 1
             nxt = text[j] if j < n else ""
             if c == "," and nxt and nxt in "}],":
-                pass  # বাড়তি কমা বাদ
+                pass
             elif c == ":" and (not nxt or nxt in ",}]"):
                 out.append(": null")
             else:
@@ -367,7 +364,6 @@ def repair_json(text):
     return "".join(out)
 
 
-# "key": "value" জোড়া খোঁজার প্যাটার্ন। value-র শেষের " বাদ পড়ে গেলেও লাইনের শেষ পর্যন্ত ধরে নেয়।
 _KV_RE = re.compile(
     r'"([^"\\\r\n]{1,40})"\s*:\s*'
     r'(?:"((?:[^"\\\r\n]|\\.)*)("?)'
@@ -377,16 +373,15 @@ _KV_RE = re.compile(
 
 
 def _extract_fields(chunk):
-    """ভাঙা একটা অংশ থেকে যতগুলো "key": "value" পাওয়া যায় তুলে আনে।"""
     rec = {}
     for m in _KV_RE.finditer(chunk):
         key = m.group(1)
         if m.group(2) is not None:
             val = m.group(2)
-            if m.group(3) == "":  # শেষের " নেই -> শেষে লেগে থাকা , } ] ফেলে দাও
+            if m.group(3) == "":
                 val = val.rstrip(" \t,}]")
             try:
-                val = json.loads('"' + val + '"', strict=False)  # \/ \uXXXX ইত্যাদি ঠিক করা
+                val = json.loads('"' + val + '"', strict=False)
             except ValueError:
                 pass
         elif m.group(4) is not None:
@@ -398,11 +393,6 @@ def _extract_fields(chunk):
 
 
 def salvage_channels(text, mapping):
-    """
-    পুরো JSON না পড়া গেলে শেষ ভরসা: প্রতিটা { থেকে আলাদা আলাদা অবজেক্ট পড়ার চেষ্টা করে।
-    ভালো অবজেক্ট যেমন আছে তেমন নেয়; ভাঙা অবজেক্ট থেকে field গুলো তুলে আনে।
-    লিংক (http...) নেই এমন কিছু নেয় না। ফেরত দেয়: (চ্যানেলের তালিকা, ভাঙা থেকে উদ্ধার হওয়া সংখ্যা)
-    """
     dec = json.JSONDecoder(strict=False)
     starts = [m.start() for m in re.finditer(r"\{", text)]
     items, repaired, k, n = [], 0, 0, len(text)
@@ -414,7 +404,7 @@ def salvage_channels(text, mapping):
             obj, end = None, s
         if obj is not None:
             items.append(obj)
-            while k < len(starts) and starts[k] < end:  # এই অবজেক্টের ভেতরের { গুলো বাদ
+            while k < len(starts) and starts[k] < end:
                 k += 1
             continue
         nxt = starts[k + 1] if k + 1 < len(starts) else n
@@ -427,8 +417,6 @@ def salvage_channels(text, mapping):
 
 
 def lenient_json_loads(text, mapping=None):
-    # strict=False: string-এর ভেতরে raw tab / newline / অন্য control character থাকলেও পড়বে
-    # (ডিফল্টে Python এগুলোকে "Invalid control character" বলে reject করে)
     try:
         return json.loads(text, strict=False)
     except json.JSONDecodeError as e:
@@ -438,7 +426,6 @@ def lenient_json_loads(text, mapping=None):
         return json.loads(repair_json(text), strict=False)
     except json.JSONDecodeError:
         pass
-    # ভুলের জায়গাটা লগে দেখাও, যাতে সোর্সের কোথায় সমস্যা বোঝা যায়
     a, b = max(0, err.pos - 80), min(len(text), err.pos + 80)
     log(f"  🔎 ভুল: {err.msg} (char {err.pos}) — আশেপাশের লেখা: {text[a:b]!r}")
     items, repaired = salvage_channels(text, mapping or {})
@@ -451,7 +438,6 @@ def lenient_json_loads(text, mapping=None):
 
 # ---------------------------------------------------------------- ফিল্ড বের করা
 def to_text(value):
-    """যেকোনো ভ্যালুকে সাধারণ টেক্সটে বদলায়।"""
     if value is None:
         return ""
     if isinstance(value, str):
@@ -493,17 +479,12 @@ def is_http(text):
 
 
 def clean(text):
-    """বিশেষ ফন্ট -> সাধারণ অক্ষর, আর M3U ভাঙতে পারে এমন চিহ্ন সরায়।"""
     text = unicodedata.normalize("NFKC", text)
     return re.sub(r"\s+", " ", text.replace('"', "'").replace(",", " ")).strip()
 
 
 # ---------------------------------------------------------------- চ্যানেল সংগ্রহ
 def collect(node, group, mapping, out, stats, is_root=True):
-    """
-    JSON ঘুরে ঘুরে চ্যানেল খোঁজে। ক্যাটেগরির (গ্রুপ) নাম মনে রেখে নিচের চ্যানেলকে দেয়।
-    out-এ (চ্যানেল, গ্রুপ) জোড়া জমা হয়।
-    """
     if isinstance(node, list):
         for it in node:
             collect(it, group, mapping, out, stats, is_root=False)
@@ -515,9 +496,8 @@ def collect(node, group, mapping, out, stats, is_root=True):
         keys = {str(k).lower() for k in node}
         url_keys = set(CANDIDATES["url"]) | ({mapping["url"].lower()} if mapping.get("url") else set())
         if keys & url_keys:
-            stats["no_url"] += 1  # চ্যানেল আছে কিন্তু লিংক ফাঁকা
+            stats["no_url"] += 1
             return
-        # এটা চ্যানেল নয়, ক্যাটেগরি/কন্টেইনার। সবচেয়ে উপরের স্তরের নাম গ্রুপ ধরা হয় না
         g = group
         if not is_root:
             own = ""
@@ -539,10 +519,11 @@ def auto_group_for(name, rules, default):
     return default
 
 
-# ---------------------------------------------------------------- M3U তৈরি
+# ---------------------------------------------------------------- M3U / FLV তৈরি
 def build_m3u(entries, mapping, src):
-    style = src.get("header_style", "extvlcopt")  # "extvlcopt" অথবা "pipe"
+    style = src.get("header_style", "extvlcopt")
     use_auto = bool(src.get("auto_group"))
+    flv_only = bool(src.get("flv_only"))
     rules = src.get("group_rules") or DEFAULT_GROUP_RULES
     default_group = src.get("default_group", "Entertainment")
 
@@ -552,6 +533,10 @@ def build_m3u(entries, mapping, src):
     seen = set()
     for i, (ch, inherited) in enumerate(entries, start=1):
         url = re.sub(r"\s+", "", pick(ch, "url", mapping))
+        if not url or not is_http(url):
+            continue
+        if flv_only and not is_flv_url(url):
+            continue
         name = clean(pick(ch, "name", mapping)) or f"Channel {i}"
         key = (name.lower(), url)
         if key in seen:
@@ -596,24 +581,55 @@ def build_m3u(entries, mapping, src):
     return "\n".join(lines) + "\n"
 
 
+def filter_m3u_flv_only(m3u_text: str) -> str:
+    lines = str(m3u_text or "").splitlines()
+    out_lines = ["#EXTM3U"]
+    pending_meta = []
+    seen = set()
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line == "#EXTM3U":
+            continue
+        if line.startswith("#PLAYLIST:"):
+            if line not in out_lines:
+                out_lines.append(line)
+            continue
+        if line.startswith("#"):
+            pending_meta.append(raw_line)
+            continue
+        if is_flv_url(line):
+            clean_u = re.sub(r"\s+", "", line)
+            if clean_u not in seen:
+                seen.add(clean_u)
+                out_lines.extend(pending_meta)
+                out_lines.append(clean_u)
+        pending_meta = []
+
+    return "\n".join(out_lines) + "\n"
+
+
 # ---------------------------------------------------------------- প্রধান কাজ (সাধারণ সোর্স)
 def process_source(src):
-    name, slug, url = src["name"], src["slug"], src["url"]
+    name, url = src["name"], src["url"]
     mapping = src.get("mapping", {}) or {}
-    out_file = OUT_DIR / f"{slug}.m3u"
-    log(f"▶ {name} -> {out_file.name}")
+    flv_only = bool(src.get("flv_only"))
+    out_file = resolve_output_file(src)
+    log(f"▶ {name} -> {out_file.name}" + (" [FLV ONLY]" if flv_only else ""))
 
     raw = fetch_text(url, user_agent=src.get("user_agent"))
 
-    # ── Encrypted সোর্স (Television-style AES) ──────────────────────────────
     if src.get("encrypted"):
         log("  🔐 এনক্রিপ্টেড সোর্স, ডিক্রিপ্ট হচ্ছে…")
         text = decrypt_television(raw)
     else:
         text = raw.decode("utf-8-sig", errors="replace")
 
-    if text.lstrip().startswith("#EXTM3U"):  # আগে থেকেই M3U হলে সরাসরি রাখবে
-        content = text if text.endswith("\n") else text + "\n"
+    if text.lstrip().startswith("#EXTM3U"):
+        if flv_only:
+            content = filter_m3u_flv_only(text)
+        else:
+            content = text if text.endswith("\n") else text + "\n"
     else:
         try:
             data = lenient_json_loads(text, mapping)
@@ -636,7 +652,7 @@ def process_source(src):
         log(f"  কোনো পরিবর্তন নেই ({count} চ্যানেল)")
     else:
         out_file.write_text(content, encoding="utf-8")
-        log(f"  ✅ আপডেট হয়েছে ({count} চ্যানেল)")
+        log(f"  ✅ আপডেট হয়েছে ({count} চ্যানেল) -> {out_file.name}")
 
 
 def main():
@@ -647,7 +663,6 @@ def main():
             log(f"⏭ {src.get('name')} বন্ধ করা আছে, বাদ দেওয়া হলো")
             continue
         try:
-            # SM IPTV এর জন্য আলাদা handler
             if src.get("type") == "smiptv":
                 process_smiptv(src)
             else:
