@@ -1,4 +1,6 @@
 #EXTM3U
 #PLAYLIST:Events FLV
 #EXTINF:-1 tvg-name="Channel 2",Channel 2
-https://live200.kravonstreamdelivery.com/live/channel18.flv
+https://live200.kravonstreamdelivery.com/live/channel16.flv
+#EXTINF:-1 tvg-name="Channel 6",Channel 6
+https://live2.jorvakstreamcache.com/live/channel21.flv
