@@ -1,8 +1,36 @@
 #EXTM3U
 #PLAYLIST:Events FLV
 #EXTINF:-1 tvg-name="Channel 1",Channel 1
-https://live3979.zundrixmediapipeline.com/live/channel19.flv
+https://live1.quickscoreboardz.com/live/channel6.flv?wsSecret=e375b13b873a6ba4b4d0b68444ca339a&wsABSTime=1795756931
 #EXTINF:-1 tvg-name="Channel 2",Channel 2
 https://live3979.zundrixmediapipeline.com/live/channel5.flv
-#EXTINF:-1 tvg-name="Channel 3",Channel 3
+#EXTINF:-1 tvg-name="Channel 4",Channel 4
+https://live3979.zundrixmediapipeline.com/live/channel11.flv
+#EXTINF:-1 tvg-name="Channel 5",Channel 5
+https://live3979.zundrixmediapipeline.com/live/channel16.flv
+#EXTINF:-1 tvg-name="Channel 6",Channel 6
 https://live3979.zundrixmediapipeline.com/live/channel24.flv
+#EXTINF:-1 tvg-name="Channel 7",Channel 7
+https://live1.quickscoreboardz.com/live/channel22.flv?wsSecret=fe7dd2ba07a29a8a1c048e39c6c63500&wsABSTime=1795756854
+#EXTINF:-1 tvg-name="Channel 8",Channel 8
+https://live1.quickscoreboardz.com/live/channel12.flv?wsSecret=6118b2ac2406d6fb419410df06138a22&wsABSTime=1795757019
+#EXTINF:-1 tvg-name="Channel 9",Channel 9
+https://live3979.zundrixmediapipeline.com/live/channel2.flv
+#EXTINF:-1 tvg-name="Channel 11",Channel 11
+https://live3979.zundrixmediapipeline.com/live/channel16.flv
+#EXTINF:-1 tvg-name="Channel 12",Channel 12
+https://live1.quickscoreboardz.com/live/channel12.flv?wsSecret=0a5b049b1298b434fc8a33952188e534&wsABSTime=1795756839
+#EXTINF:-1 tvg-name="Channel 14",Channel 14
+https://live3979.zundrixmediapipeline.com/live/channel21.flv
+#EXTINF:-1 tvg-name="Channel 15",Channel 15
+https://live3979.zundrixmediapipeline.com/live/channel19.flv
+#EXTINF:-1 tvg-name="Channel 16",Channel 16
+https://live3979.zundrixmediapipeline.com/live/channel20.flv
+#EXTINF:-1 tvg-name="Channel 17",Channel 17
+https://live1.quickscoreboardz.com/live/channel13.flv?wsSecret=a15a3759c88dfe217435e2640b158c0e&wsABSTime=1795756896
+#EXTINF:-1 tvg-name="Channel 18",Channel 18
+https://live1.quickscoreboardz.com/live/channel17.flv?wsSecret=1edb0ffbd155806e97bec7de90b9fc1e&wsABSTime=1795756874
+#EXTINF:-1 tvg-name="Channel 19",Channel 19
+https://live3979.zundrixmediapipeline.com/live/channel18.flv
+#EXTINF:-1 tvg-name="Channel 20",Channel 20
+https://live1.quickscoreboardz.com/live/channel9.flv?wsSecret=0b36bc2539a0e19383a9fc0d8da655f2&wsABSTime=1795756966
